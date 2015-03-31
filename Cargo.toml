@@ -1,0 +1,10 @@
+[package]
+name = "everything_bot2"
+version = "0.0.1"
+authors = ["JustANull <reid.levenick@gmail.com>"]
+
+[dependencies]
+hyper = "*"
+irc = "*"
+regex = "*"
+regex_macros = "*"
