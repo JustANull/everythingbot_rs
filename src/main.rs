@@ -66,7 +66,7 @@ mod bot {
                 s.chars().skip(1).filter(|c| *c == ' ' || *c == '\u{0007}' || *c == ',').next().is_none()
         }
     }
-    pub mod websiteinfo {
+    pub mod regexmatch {
         use irc::client::data::{Command, Message};
         use regex::Regex;
         use serialize::json;
@@ -76,12 +76,60 @@ mod bot {
         use super::Subscriber;
         use super::util::{collect_errors, get_reply_target, http_get};
 
-        pub struct WebsiteInfo {
+        pub struct RegexMatch {
             gapi_key: String,
-            xkcd_cache: HashMap<String, String>,
             yt_cache: HashMap<String, String>
         }
 
+        fn weather_k_to_c(k: f64) -> f64 {
+            k - 273.15
+        }
+        fn weather_k_to_f(k: f64) -> f64 {
+            let c = weather_k_to_c(k);
+            1.8 * c + 32.0
+        }
+        fn weather_handler(_: &mut RegexMatch, loc: &str) -> Result<String, Error> {
+            let url = format!("http://api.openweathermap.org/data/2.5/weather?q={}", loc);
+
+            let resp = &try!(http_get(&url))[..];
+            let resp_json = match json::Json::from_str(resp) {
+                Ok(resp_json) => resp_json,
+                Err(e) => return Err(Error::new(ErrorKind::Other, "JSON Parse", Some(format!("{:?}", e))))
+            };
+
+            match resp_json.find("message") {
+                Some(e) => {
+                    let e = e.as_string().expect("OpenWeatherMap API error - 'message' was not a string");
+
+                    return Err(Error::new(ErrorKind::Other, "OpenWeatherMap API", Some(e.to_string())));
+                },
+                None => {}
+            };
+
+            let name = resp_json
+                .find("name").expect("OpenWeatherMap API error - could not find 'name'")
+                .as_string().expect("OpenWeatherMap API error - 'name' was not a string");
+            let description = resp_json
+                .find("weather").expect("OpenWeatherMap API error - could not find 'weather'")
+                .as_array().expect("OpenWeatherMap API error - 'weather' was not an array")[0]
+                .find("description").expect("OpenWeatherMap API error - could not find 'description'")
+                .as_string().expect("OpenWeatherMap API error - 'description' was not a string");
+            let main = resp_json
+                .find("main").expect("OpenWeatherMap API error - could not find 'main'");
+            let temp_k = main
+                .find("temp").expect("OpenWeatherMap API error - could not find 'temp'")
+                .as_f64().expect("OpenWeatherMap API error - 'temp' was not a number");
+            let humidity = main
+                .find("humidity").expect("OpenWeatherMap API error - could not find 'humidity'")
+                .as_f64().expect("OpenWeatherMap API error - 'humidity' was not a number");
+            let wind_speed = resp_json
+                .find("wind").expect("OpenWeatherMap API error - could not find 'wind'")
+                .find("speed").expect("OpenWeatherMap API error - could not find 'speed'")
+                .as_f64().expect("OpenWeatherMap API error - 'speed' was not a number");
+
+            Ok(format!("{} weather: {} \u{00B0}F ({} \u{00B0}C), {}% humidity, {} and wind {} m/s",
+                       name, weather_k_to_f(temp_k), weather_k_to_c(temp_k), humidity, description, wind_speed))
+        }
         fn yt_parse_time(s: &str) -> String {
             let mut in_time = false;
             let mut start_idx: Option<usize> = None;
@@ -123,7 +171,7 @@ mod bot {
 
             length
         }
-        fn yt_handler(this: &mut WebsiteInfo, id: &str) -> Result<String, Error> {
+        fn yt_handler(this: &mut RegexMatch, id: &str) -> Result<String, Error> {
             Ok(match this.yt_cache.entry(id.to_string()) {
                 Entry::Occupied(entry) => entry.get().clone(),
                 Entry::Vacant(entry) => {
@@ -158,20 +206,46 @@ mod bot {
                 }
             })
         }
-        static URL_RES: &'static [(Regex, fn(&mut WebsiteInfo, &str) -> Result<String, Error>)] =
-            &[(regex!(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)"), yt_handler)];
+        fn xkcd_handler(_: &mut RegexMatch, id: &str) -> Result<String, Error> {
+            let url = format!("https://xkcd.com/{}/info.0.json", id);
 
-        impl WebsiteInfo {
-            pub fn new(gapi_key: &str) -> WebsiteInfo {
-                WebsiteInfo {
+            let resp = &try!(http_get(&url))[..];
+            let resp_json = match json::Json::from_str(resp) {
+                Ok(resp_json) => resp_json,
+                Err(e) => return Err(Error::new(ErrorKind::Other, "JSON Parse", Some(format!("{:?}", e))))
+            };
+
+            let title = resp_json
+                .find("title").expect("XKCD API error - could not find 'title'")
+                .as_string().expect("XKCD API error - 'title' was not a string");
+            let year = resp_json
+                .find("year").expect("XKCD API error - could not find 'year'")
+                .as_string().expect("XKCD API error - 'year' was not a string");
+            let month = resp_json
+                .find("month").expect("XKCD API error - could not find 'month'")
+                .as_string().expect("XKCD API error - 'month' was not a string");
+            let day = resp_json
+                .find("day").expect("XKCD API error - could not find 'day'")
+                .as_string().expect("XKCD API error - 'day' was not a string");
+
+            Ok(format!("{} ({}-{}-{})", title, year, month, day))
+        }
+
+        static URL_RES: &'static [(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)] =
+            &[(regex!(r"^!weather\s*(.+?)\s*$"), weather_handler),
+              (regex!(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)"), yt_handler),
+              (regex!(r"xkcd\.com/(\d+)"), xkcd_handler)];
+
+        impl RegexMatch {
+            pub fn new(gapi_key: &str) -> RegexMatch {
+                RegexMatch {
                     gapi_key: gapi_key.to_string(),
-                    xkcd_cache: HashMap::new(),
                     yt_cache: HashMap::new()
                 }
             }
         }
 
-        impl Subscriber for WebsiteInfo {
+        impl Subscriber for RegexMatch {
             fn on_message<'a>(&mut self, msg: &'a Message) -> Result<Option<Command>, Error> {
                 if msg.command == "PRIVMSG" {
                     return if let Some(reply_target) = get_reply_target(msg) {
@@ -270,21 +344,21 @@ mod bot {
 }
 
 use bot::Bot;
-use bot::websiteinfo::WebsiteInfo;
+use bot::regexmatch::RegexMatch;
 use irc::client::data::Config;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
 fn main() {
-    let mut websiteinfo = WebsiteInfo::new(&File::open(Path::new("gapi_key.dat"))
-                                           .ok().expect("gapi_key.dat should be on the path")
-                                           .chars()
-                                           .map(|c| c.ok().expect("gapi_key.dat should be UTF-8"))
-                                           .collect::<String>());
+    let mut regex_match = RegexMatch::new(&File::open(Path::new("gapi_key.dat"))
+                                         .ok().expect("gapi_key.dat should be on the path")
+                                         .chars()
+                                         .map(|c| c.ok().expect("gapi_key.dat should be UTF-8"))
+                                         .collect::<String>());
 
     let mut bot = Bot::new(Config::load_utf8("config.json").unwrap()).unwrap();
 
-    bot.add_subscriber(&mut websiteinfo);
+    bot.add_subscriber(&mut regex_match);
     bot.loop_forever();
 }
