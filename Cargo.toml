@@ -6,6 +6,6 @@ authors = ["JustANull <reid.levenick@gmail.com>"]
 [dependencies]
 hyper = "*"
 irc = "*"
+lazy_static = "*"
 regex = "*"
-regex_macros = "*"
 rustc-serialize = "*"

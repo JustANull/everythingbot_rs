@@ -1,14 +1,13 @@
-#![feature(io, plugin)]
-#![plugin(regex_macros)]
-
 extern crate hyper;
 extern crate irc;
+#[macro_use]
+extern crate lazy_static;
 extern crate regex;
 extern crate rustc_serialize as serialize;
 
 mod bot {
     pub mod util {
-        use hyper::client::{Client, IntoBody};
+        use hyper::client::Client;
         use hyper::status::StatusCode;
         use irc::client::data::Message;
         use std::io::{Error, ErrorKind, Read};
@@ -47,19 +46,19 @@ mod bot {
         pub fn http_get(url: &str) -> Result<String, Error> {
             let mut resp = match Client::new().get(url).send() {
                 Ok(resp) => resp,
-                Err(e) => return Err(Error::new(ErrorKind::Other, "Connection failed.", Some(format!("{:?}", e))))
+                Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
 
-            let mut body = match resp.status {
-                StatusCode::Ok => resp.into_body(),
-                StatusCode::BadRequest => return Err(Error::new(ErrorKind::Other, "HTTP Bad Request", None)),
-                StatusCode::NotFound => return Err(Error::new(ErrorKind::Other, "HTTP Not Found", None)),
-                _ => return Err(Error::new(ErrorKind::Other, "HTTP Error", Some(format!("{:?}", resp.status))))
-            };
-
-            let mut body_str = String::new();
-            try!(body.read_to_string(&mut body_str));
-            Ok(body_str)
+            match resp.status {
+                StatusCode::Ok => {
+                    let mut body = String::new();
+                    try!(resp.read_to_string(&mut body));
+                    Ok(body)
+                },
+                StatusCode::BadRequest => Err(Error::new(ErrorKind::Other, "HTTP Bad Request")),
+                StatusCode::NotFound => Err(Error::new(ErrorKind::Other, "HTTP Not Found")),
+                _ => Err(Error::new(ErrorKind::Other, format!("{:?}", resp.status)))
+            }
         }
         pub fn is_channel(s: &str) -> bool {
             s.chars().take(1).next().map(|c| c == '#' || c == '&').unwrap_or(false) &&
@@ -94,14 +93,14 @@ mod bot {
             let resp = &try!(http_get(&url))[..];
             let resp_json = match json::Json::from_str(resp) {
                 Ok(resp_json) => resp_json,
-                Err(e) => return Err(Error::new(ErrorKind::Other, "JSON Parse", Some(format!("{:?}", e))))
+                Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
 
             match resp_json.find("message") {
                 Some(e) => {
                     let e = e.as_string().expect("OpenWeatherMap API error - 'message' was not a string");
 
-                    return Err(Error::new(ErrorKind::Other, "OpenWeatherMap API", Some(e.to_string())));
+                    return Err(Error::new(ErrorKind::Other, e))
                 },
                 None => {}
             };
@@ -180,7 +179,7 @@ mod bot {
                     let resp = &try!(http_get(&url))[..];
                     let resp_json = match json::Json::from_str(resp) {
                         Ok(resp_json) => resp_json,
-                        Err(e) => return Err(Error::new(ErrorKind::Other, "JSON Parse", Some(format!("{:?}", e))))
+                        Err(e) => return Err(Error::new(ErrorKind::Other, e))
                     };
 
                     // I chose to panic here on any errors, since if we get a response from Youtube
@@ -212,7 +211,7 @@ mod bot {
             let resp = &try!(http_get(&url))[..];
             let resp_json = match json::Json::from_str(resp) {
                 Ok(resp_json) => resp_json,
-                Err(e) => return Err(Error::new(ErrorKind::Other, "JSON Parse", Some(format!("{:?}", e))))
+                Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
 
             let title = resp_json
@@ -231,10 +230,12 @@ mod bot {
             Ok(format!("{} ({}-{}-{})", title, year, month, day))
         }
 
-        static URL_RES: &'static [(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)] =
-            &[(regex!(r"^!weather\s*(.+?)\s*$"), weather_handler),
-              (regex!(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)"), yt_handler),
-              (regex!(r"xkcd\.com/(\d+)"), xkcd_handler)];
+        lazy_static! {
+            static ref URL_RES: Vec<(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)> =
+                vec![(Regex::new(r"^!weather\s*(.+?)\s*$").unwrap(), weather_handler),
+                     (Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(), yt_handler),
+                     (Regex::new(r"xkcd\.com/(\d+)").unwrap(), xkcd_handler)];
+        }
 
         impl RegexMatch {
             pub fn new(gapi_key: &str) -> RegexMatch {
@@ -262,13 +263,13 @@ mod bot {
                                     .fold(Ok(String::new()), collect_errors)
                             }).fold(Ok(String::new()), collect_errors) {
                                 Ok(res) => Ok(Some(Command::PRIVMSG(reply_target.to_string(), res))),
-                                Err(e) => Err(Error::new(ErrorKind::Other, "Detailing a series of errors.", Some(e)))
+                                Err(e) => Err(Error::new(ErrorKind::Other, e))
                             }
                         } else {
-                            Err(Error::new(ErrorKind::Other, "No message text.", Some(msg.into_string())))
+                            Err(Error::new(ErrorKind::Other, "No message text."))
                         }
                     } else {
-                        Err(Error::new(ErrorKind::Other, "Unable to determine reply target.", Some(msg.into_string())))
+                        Err(Error::new(ErrorKind::Other, "Unable to determine reply target."))
                     }
                 }
 
@@ -351,13 +352,13 @@ use std::io::Read;
 use std::path::Path;
 
 fn main() {
-    let mut regex_match = RegexMatch::new(&File::open(Path::new("gapi_key.dat"))
-                                         .ok().expect("gapi_key.dat should be on the path")
-                                         .chars()
-                                         .map(|c| c.ok().expect("gapi_key.dat should be UTF-8"))
-                                         .collect::<String>());
+    let mut regex_match = RegexMatch::new(&String::from_utf8(File::open(Path::new("gapi_key.dat"))
+                                                             .ok().expect("gapi_key.dat should be on the path")
+                                                             .bytes()
+                                                             .map(|b| b.unwrap())
+                                                             .collect::<Vec<u8>>()).unwrap());
 
-    let mut bot = Bot::new(Config::load_utf8("config.json").unwrap()).unwrap();
+    let mut bot = Bot::new(Config::load(Path::new("config.json")).unwrap()).unwrap();
 
     bot.add_subscriber(&mut regex_match);
     bot.loop_forever();
