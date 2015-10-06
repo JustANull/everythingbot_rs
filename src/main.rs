@@ -171,7 +171,7 @@ mod bot {
             length
         }
         fn yt_handler(this: &mut RegexMatch, id: &str) -> Result<String, Error> {
-            Ok(match this.yt_cache.entry(id.to_string()) {
+            Ok(match this.yt_cache.entry(id.to_owned()) {
                 Entry::Occupied(entry) => entry.get().clone(),
                 Entry::Vacant(entry) => {
                     let url = format!("https://www.googleapis.com/youtube/v3/videos?id={}&key={}&part=snippet,contentDetails&fields=items(snippet/title,snippet/channelTitle,contentDetails/duration)", id, this.gapi_key);
@@ -240,7 +240,7 @@ mod bot {
         impl RegexMatch {
             pub fn new(gapi_key: &str) -> RegexMatch {
                 RegexMatch {
-                    gapi_key: gapi_key.to_string(),
+                    gapi_key: gapi_key.to_owned(),
                     yt_cache: HashMap::new()
                 }
             }
@@ -262,7 +262,7 @@ mod bot {
                                     })
                                     .fold(Ok(String::new()), collect_errors)
                             }).fold(Ok(String::new()), collect_errors) {
-                                Ok(res) => Ok(Some(Command::PRIVMSG(reply_target.to_string(), res))),
+                                Ok(res) => Ok(Some(Command::PRIVMSG(reply_target.to_owned(), res))),
                                 Err(e) => Err(Error::new(ErrorKind::Other, e))
                             }
                         } else {
