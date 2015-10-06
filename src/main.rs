@@ -126,7 +126,7 @@ mod bot {
                 .find("speed").expect("OpenWeatherMap API error - could not find 'speed'")
                 .as_f64().expect("OpenWeatherMap API error - 'speed' was not a number");
 
-            Ok(format!("{} weather: {} \u{00B0}F ({} \u{00B0}C), {}% humidity, {} and wind {} m/s",
+            Ok(format!("{} weather: {:.2} \u{00B0}F ({:.2} \u{00B0}C), {}% humidity, {} and wind {:.2} m/s",
                        name, weather_k_to_f(temp_k), weather_k_to_c(temp_k), humidity, description, wind_speed))
         }
         fn yt_parse_time(s: &str) -> String {
@@ -227,7 +227,7 @@ mod bot {
                 .find("day").expect("XKCD API error - could not find 'day'")
                 .as_string().expect("XKCD API error - 'day' was not a string");
 
-            Ok(format!("{} ({}-{}-{})", title, year, month, day))
+            Ok(format!("XKCD {} ({}-{}-{})", title, year, month, day))
         }
 
         lazy_static! {
@@ -348,15 +348,17 @@ use bot::Bot;
 use bot::regexmatch::RegexMatch;
 use irc::client::data::Config;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Error, Read};
 use std::path::Path;
 
+fn file_get(p: &Path) -> Result<Vec<u8>, Error> {
+    Ok(try!(File::open(p)).bytes().map(|b| b.unwrap()).collect::<Vec<u8>>())
+}
+
 fn main() {
-    let mut regex_match = RegexMatch::new(&String::from_utf8(File::open(Path::new("gapi_key.dat"))
-                                                             .ok().expect("gapi_key.dat should be on the path")
-                                                             .bytes()
-                                                             .map(|b| b.unwrap())
-                                                             .collect::<Vec<u8>>()).unwrap());
+    let mut regex_match = RegexMatch::new(&String::from_utf8(file_get(Path::new("gapi_key.dat"))
+                                                             .ok().expect("gapi_key.dat should be on the path"))
+                                          .ok().expect("gapi_key.dat should contain only the Google API key (no trailing newlines)"));
 
     let mut bot = Bot::new(Config::load(Path::new("config.json")).unwrap()).unwrap();
 

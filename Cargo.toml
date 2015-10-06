@@ -4,8 +4,8 @@ version = "0.0.1"
 authors = ["JustANull <reid.levenick@gmail.com>"]
 
 [dependencies]
-hyper = "*"
-irc = "*"
-lazy_static = "*"
-regex = "*"
-rustc-serialize = "*"
+hyper = "0.6.*"
+irc = "0.9.*"
+lazy_static = "0.1.*"
+regex = "0.1.*"
+rustc-serialize = "0.3.*"
