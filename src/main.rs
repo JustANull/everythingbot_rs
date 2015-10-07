@@ -332,7 +332,7 @@ mod bot {
         lazy_static! {
             // The regular expressions and their handlers to match with
             static ref URL_RES: Vec<(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)> =
-                vec![(Regex::new(r"gfycat\.com/(\w+)").unwrap(), gfycat_handler),
+                vec![(Regex::new(r"gfycat\.com/((?:[A-Z][a-z]+){3})").unwrap(), gfycat_handler),
                      (Regex::new(r"^!weather\s*(.+?)\s*$").unwrap(), weather_handler),
                      (Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(), yt_handler),
                      (Regex::new(r"xkcd\.com/(\d+)").unwrap(), xkcd_handler)];
