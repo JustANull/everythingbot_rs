@@ -59,7 +59,8 @@ mod bot {
         }
         // Pulls down the content of a request to a URL as a string
         pub fn http_get(url: &str) -> Result<String, Error> {
-            let mut resp = match Client::new().get(url).send() {
+            let client = Client::new();
+            let mut resp = match client.get(url).send() {
                 Ok(resp) => resp,
                 Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
@@ -111,9 +112,58 @@ mod bot {
         // TODO: This is really domain specific right now. Should this be refactored to contain the regular expressions to match over?
         pub struct RegexMatch {
             gapi_key: String,
-            yt_cache: HashMap<String, String>
+            gfycat_cache: HashMap<String, String>,
+            yt_cache: HashMap<String, String>,
+            xkcd_cache: HashMap<String, String>
         }
 
+        // Calls into the gfycat API to try to pull down gfycat titles, sizes, and NSFW status
+        fn gfycat_handler(this: &mut RegexMatch, id: &str) -> Result<String, Error> {
+            Ok(match this.gfycat_cache.entry(id.to_owned()) {
+                Entry::Occupied(entry) => entry.get().clone(),
+                Entry::Vacant(entry) => {
+                    let url = format!("http://gfycat.com/cajax/get/{}", id);
+
+                    let resp = &try!(http_get(&url))[..];
+                    let resp_json = match json::Json::from_str(resp) {
+                        Ok(resp_json) => resp_json,
+                        Err(e) => return Err(Error::new(ErrorKind::Other, e))
+                    };
+
+                    match resp_json.find("error") {
+                        Some(e) => {
+                            let e = e.as_string().expect("gfycat API error - 'error' was not a string");
+
+                            return Err(Error::new(ErrorKind::Other, e))
+                        },
+                        None => {}
+                    };
+
+                    // Panic here if we don't see what we expect, since the API shouldn't change underneath us
+                    let item = resp_json
+                        .find("gfyItem").expect("gfycat API error - could not find 'gfyItem'")
+                        .as_object().expect("gfycat API error - 'gfyItem' was not an object");
+                    let framerate = item
+                        .get("frameRate").expect("gfycat API error - could not find 'frameRate'")
+                        .as_u64().expect("gfycat API error - 'framerate' was not a u64");
+                    let frames = item
+                        .get("numFrames").expect("gfycat API error - could not find 'numFrames'")
+                        .as_u64().expect("gfycat API error - 'numFrames' was not a u64");
+                    let nsfw = item
+                        .get("nsfw").expect("gfycat API error - could not find 'nsfw'")
+                        .as_string().map_or("", |s| if s == "1" { "NSFW " } else { "" });
+                    let size = item
+                        .get("webmSize").expect("gfycat API error - could not find 'webmSize'")
+                        .as_u64().expect("gfycat API error - 'webmSize' was not a u64");
+                    let title = item
+                        .get("title").expect("gfycat API error - could not find 'title'")
+                        .as_string().map_or("<unknown>".to_owned(), |s| format!("\"{}\"", s));
+
+                    let res = format!("{}{} ({:.2} MB, {:.1} seconds)", nsfw, title, size as f64 / (2.0 * 1024.0 * 1024.0), frames as f64 / framerate as f64);
+                    entry.insert(res).clone()
+                }
+            })
+        }
         // Convert Kelvin to Celcius
         fn weather_k_to_c(k: f64) -> f64 {
             k - 273.15
@@ -248,35 +298,42 @@ mod bot {
             })
         }
         // Calls into XKCD's API to determine comic name and date from a comic ID
-        fn xkcd_handler(_: &mut RegexMatch, id: &str) -> Result<String, Error> {
-            let url = format!("https://xkcd.com/{}/info.0.json", id);
+        fn xkcd_handler(this: &mut RegexMatch, id: &str) -> Result<String, Error> {
+            Ok(match this.xkcd_cache.entry(id.to_owned()) {
+                Entry::Occupied(entry) => entry.get().clone(),
+                Entry::Vacant(entry) => {
+                    let url = format!("https://xkcd.com/{}/info.0.json", id);
 
-            let resp = &try!(http_get(&url))[..];
-            let resp_json = match json::Json::from_str(resp) {
-                Ok(resp_json) => resp_json,
-                Err(e) => return Err(Error::new(ErrorKind::Other, e))
-            };
+                    let resp = &try!(http_get(&url))[..];
+                    let resp_json = match json::Json::from_str(resp) {
+                        Ok(resp_json) => resp_json,
+                        Err(e) => return Err(Error::new(ErrorKind::Other, e))
+                    };
 
-            let title = resp_json
-                .find("title").expect("XKCD API error - could not find 'title'")
-                .as_string().expect("XKCD API error - 'title' was not a string");
-            let year = resp_json
-                .find("year").expect("XKCD API error - could not find 'year'")
-                .as_string().expect("XKCD API error - 'year' was not a string");
-            let month = resp_json
-                .find("month").expect("XKCD API error - could not find 'month'")
-                .as_string().expect("XKCD API error - 'month' was not a string");
-            let day = resp_json
-                .find("day").expect("XKCD API error - could not find 'day'")
-                .as_string().expect("XKCD API error - 'day' was not a string");
+                    let title = resp_json
+                        .find("title").expect("XKCD API error - could not find 'title'")
+                        .as_string().expect("XKCD API error - 'title' was not a string");
+                    let year = resp_json
+                        .find("year").expect("XKCD API error - could not find 'year'")
+                        .as_string().expect("XKCD API error - 'year' was not a string");
+                    let month = resp_json
+                        .find("month").expect("XKCD API error - could not find 'month'")
+                        .as_string().expect("XKCD API error - 'month' was not a string");
+                    let day = resp_json
+                        .find("day").expect("XKCD API error - could not find 'day'")
+                        .as_string().expect("XKCD API error - 'day' was not a string");
 
-            Ok(format!("{} ({}-{}-{})", title, year, month, day))
+                    let res = format!("{} ({}-{}-{})", title, year, month, day);
+                    entry.insert(res).clone()
+                }
+            })
         }
 
         lazy_static! {
             // The regular expressions and their handlers to match with
             static ref URL_RES: Vec<(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)> =
-                vec![(Regex::new(r"^!weather\s*(.*)\s*$").unwrap(), weather_handler),
+                vec![(Regex::new(r"gfycat\.com/(\w+)").unwrap(), gfycat_handler),
+                     (Regex::new(r"^!weather\s*(.+?)\s*$").unwrap(), weather_handler),
                      (Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(), yt_handler),
                      (Regex::new(r"xkcd\.com/(\d+)").unwrap(), xkcd_handler)];
         }
@@ -285,7 +342,9 @@ mod bot {
             pub fn new(gapi_key: &str) -> RegexMatch {
                 RegexMatch {
                     gapi_key: gapi_key.to_owned(),
-                    yt_cache: HashMap::new()
+                    gfycat_cache: HashMap::new(),
+                    yt_cache: HashMap::new(),
+                    xkcd_cache: HashMap::new()
                 }
             }
         }
