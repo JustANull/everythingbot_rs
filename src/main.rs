@@ -28,7 +28,7 @@ mod bot {
                 },
                 Err(mut st) => {
                     if let Err(e) = s {
-                        st.push('\n');
+                        st.push_str("; ");
                         st.push_str(&e);
                     }
 
@@ -249,7 +249,7 @@ mod bot {
         impl Subscriber for RegexMatch {
             fn on_message<'a>(&mut self, msg: &'a Message) -> Result<Option<Command>, Error> {
                 if msg.command == "PRIVMSG" {
-                    return if let Some(reply_target) = get_reply_target(msg) {
+                    if let Some(reply_target) = get_reply_target(msg) {
                         if let Some(ref suffix) = msg.suffix {
                             match URL_RES.iter().map(|&(ref re, handler)| {
                                 re
@@ -271,9 +271,9 @@ mod bot {
                     } else {
                         Err(Error::new(ErrorKind::Other, "Unable to determine reply target."))
                     }
+                } else {
+                    Ok(None)
                 }
-
-                Ok(None)
             }
         }
     }
