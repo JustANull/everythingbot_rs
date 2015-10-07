@@ -227,12 +227,12 @@ mod bot {
                 .find("day").expect("XKCD API error - could not find 'day'")
                 .as_string().expect("XKCD API error - 'day' was not a string");
 
-            Ok(format!("XKCD {} ({}-{}-{})", title, year, month, day))
+            Ok(format!("{} ({}-{}-{})", title, year, month, day))
         }
 
         lazy_static! {
             static ref URL_RES: Vec<(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)> =
-                vec![(Regex::new(r"^!weather\s*(.+?)\s*$").unwrap(), weather_handler),
+                vec![(Regex::new(r"^!weather\s*(.*)\s*$").unwrap(), weather_handler),
                      (Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(), yt_handler),
                      (Regex::new(r"xkcd\.com/(\d+)").unwrap(), xkcd_handler)];
         }
