@@ -12,13 +12,16 @@ mod bot {
         use irc::client::data::Message;
         use std::io::{Error, ErrorKind, Read};
 
-        // A function to collect a series of successes or errors into a single string.
-        // Errors take priority over everything else and are *not* displayed alongside successes.
-        // Otherwise, all successes will be together, or all errors will be together.
+        // Collates a series of successes or errors into a single string
+        // Errors take priority over everything else and are *not* displayed alongside successes
+        // Otherwise, all successes will be together, or all errors will be together
+        // Reduces a state and a value into a new state
         pub fn collate_results(st: Result<String, String>, s: Result<String, String>) -> Result<String, String> {
             match st {
                 Ok(mut st) => {
                     if let Ok(s) = s {
+                        // Only add onto the list if the string is non-empty
+                        // One might suggest Result<Option<String>, String>, but maybe another time
                         if !s.is_empty() {
                             if !st.is_empty() {
                                 st.push_str("; ");
@@ -29,11 +32,13 @@ mod bot {
 
                         Ok(st)
                     } else {
+                        // An error occurred, so we switch to that state
                         s
                     }
                 },
                 Err(mut st) => {
                     if let Err(e) = s {
+                        // No need to check, since we only enter this state if we had an error previously
                         st.push_str("; ");
                         st.push_str(&e);
                     }
@@ -42,6 +47,9 @@ mod bot {
                 }
             }
         }
+        // Determines from a message where to reply
+        // If the message was public to a channel, we tell the entire channel
+        // Otherwise, the message might have been direct - reply directly
         pub fn get_reply_target(msg: &Message) -> Option<&str> {
             if is_channel(&msg.args[0][..]) {
                 Some(&msg.args[0][..])
@@ -49,6 +57,7 @@ mod bot {
                 msg.get_source_nickname()
             }
         }
+        // Pulls down the content of a request to a URL as a string
         pub fn http_get(url: &str) -> Result<String, Error> {
             let mut resp = match Client::new().get(url).send() {
                 Ok(resp) => resp,
@@ -66,9 +75,27 @@ mod bot {
                 _ => Err(Error::new(ErrorKind::Other, format!("{:?}", resp.status)))
             }
         }
+        // Determines whether a string represents an IRC channel
         pub fn is_channel(s: &str) -> bool {
-            s.chars().take(1).next().map(|c| c == '#' || c == '&').unwrap_or(false) &&
-                s.chars().skip(1).filter(|c| *c == ' ' || *c == '\u{0007}' || *c == ',').next().is_none()
+            let mut chars = s.chars();
+
+            // It isn't a channel if it's zero length
+            if let Some(c) = chars.next() {
+                // And it isn't a channel if it starts with something other than '#' or '&'
+                if c != '#' && c != '&' {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+
+            // It isn't a channel any of the remaining characters are ' ', a C-G, or a comma
+            if let Some(_) = chars.filter(|&c| c == ' ' || c == '\u{0007}' || c == ',').next() {
+                return false;
+            }
+
+            // We fulfilled all of the conditions above, so it is probably a channel name
+            true
         }
     }
     pub mod regexmatch {
@@ -81,18 +108,22 @@ mod bot {
         use super::Subscriber;
         use super::util::{collate_results, get_reply_target, http_get};
 
+        // TODO: This is really domain specific right now. Should this be refactored to contain the regular expressions to match over?
         pub struct RegexMatch {
             gapi_key: String,
             yt_cache: HashMap<String, String>
         }
 
+        // Convert Kelvin to Celcius
         fn weather_k_to_c(k: f64) -> f64 {
             k - 273.15
         }
+        // Convert Kelvin to Fahrenheit
         fn weather_k_to_f(k: f64) -> f64 {
             let c = weather_k_to_c(k);
             1.8 * c + 32.0
         }
+        // Calls into the OpenWeatherMap API to try and get the weather at `loc`
         fn weather_handler(_: &mut RegexMatch, loc: &str) -> Result<String, Error> {
             let url = format!("http://api.openweathermap.org/data/2.5/weather?q={}", loc);
 
@@ -111,6 +142,7 @@ mod bot {
                 None => {}
             };
 
+            // Panic here if we don't see what we expect, since the API shouldn't change underneath us
             let name = resp_json
                 .find("name").expect("OpenWeatherMap API error - could not find 'name'")
                 .as_string().expect("OpenWeatherMap API error - 'name' was not a string");
@@ -135,6 +167,9 @@ mod bot {
             Ok(format!("{} weather: {:.2} \u{00B0}F ({:.2} \u{00B0}C), {}% humidity, {} and wind {:.2} m/s",
                        name, weather_k_to_f(temp_k), weather_k_to_c(temp_k), humidity, description, wind_speed))
         }
+        // Parses an ISO 8601 duration string into a human-readable duration
+        // e.g. "3M20S" -> 3 minutes 20 seconds
+        // TODO: Is there a package since I made this that handles ISO time well?
         fn yt_parse_time(s: &str) -> String {
             let mut in_time = false;
             let mut start_idx: Option<usize> = None;
@@ -176,6 +211,7 @@ mod bot {
 
             length
         }
+        // Calls into Google's Youtube API to determine video duration, title, and channel title, or accesses that data from a cache
         fn yt_handler(this: &mut RegexMatch, id: &str) -> Result<String, Error> {
             Ok(match this.yt_cache.entry(id.to_owned()) {
                 Entry::Occupied(entry) => entry.get().clone(),
@@ -189,7 +225,7 @@ mod bot {
                     };
 
                     // I chose to panic here on any errors, since if we get a response from Youtube
-                    // it should be of the correct form - their API shouldn't change underneath us.
+                    // it should be of the correct form - their API shouldn't change underneath us
                     let ref items = resp_json
                         .find("items").expect("Youtube API error - could not find 'items'")
                         .as_array().expect("Youtube API error - 'items' was not an array")[0];
@@ -211,6 +247,7 @@ mod bot {
                 }
             })
         }
+        // Calls into XKCD's API to determine comic name and date from a comic ID
         fn xkcd_handler(_: &mut RegexMatch, id: &str) -> Result<String, Error> {
             let url = format!("https://xkcd.com/{}/info.0.json", id);
 
@@ -237,6 +274,7 @@ mod bot {
         }
 
         lazy_static! {
+            // The regular expressions and their handlers to match with
             static ref URL_RES: Vec<(Regex, fn(&mut RegexMatch, &str) -> Result<String, Error>)> =
                 vec![(Regex::new(r"^!weather\s*(.*)\s*$").unwrap(), weather_handler),
                      (Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(), yt_handler),
@@ -257,7 +295,9 @@ mod bot {
                 if msg.command == "PRIVMSG" {
                     if let Some(reply_target) = get_reply_target(msg) {
                         if let Some(ref suffix) = msg.suffix {
+                            // Collate the results from running the handlers on the message.
                             match URL_RES.iter().map(|&(ref re, handler)| {
+                                // Runs the regular expression on the message, and if there is a match then call the handler, collating all results.
                                 re
                                     .captures_iter(suffix)
                                     .filter_map(|capture| capture.at(1))
@@ -324,6 +364,10 @@ mod bot {
                     Ok(Some(msg)) => server.send(msg),
                     Ok(None) => Ok(()),
                     Err(e) => {
+                        // In the case of an error, notify every channel we're connected to about it
+                        // Errors shouldn't happen, because they indicate a failure in our code to properly
+                        // handle APIs. Errors which result from program logic being incorrect (or APIs changing
+                        // underneath us, which is impossible to handle anyway) are panics rather than errors
                         let targets = server.config().channels().iter().fold(String::new(), |mut st, chan| {
                             if st.len() > 0 {
                                 st.push(',');
@@ -332,12 +376,15 @@ mod bot {
                             st
                         });
 
-                        //TODO: Log here
+                        //TODO: Log here somewhere that isn't the console
                         println!("{:?} {:?}", targets, e);
 
                         if targets.len() > 0 {
                             server.send(Command::PRIVMSG(targets, format!("{}", e)))
                         } else {
+                            // We aren't connected to any channels, but there was an error
+                            // Such a thing might happen if it happened during a private message while connected to no channels
+                            // For now, ignore that case and do nothing
                             Ok(())
                         }
                     }
