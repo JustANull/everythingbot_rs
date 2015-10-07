@@ -12,7 +12,10 @@ mod bot {
         use irc::client::data::Message;
         use std::io::{Error, ErrorKind, Read};
 
-        pub fn collect_errors(st: Result<String, String>, s: Result<String, String>) -> Result<String, String> {
+        // A function to collect a series of successes or errors into a single string.
+        // Errors take priority over everything else and are *not* displayed alongside successes.
+        // Otherwise, all successes will be together, or all errors will be together.
+        pub fn collate_results(st: Result<String, String>, s: Result<String, String>) -> Result<String, String> {
             match st {
                 Ok(mut st) => {
                     if let Ok(s) = s {
@@ -76,7 +79,7 @@ mod bot {
         use std::collections::hash_map::Entry;
         use std::io::{Error, ErrorKind};
         use super::Subscriber;
-        use super::util::{collect_errors, get_reply_target, http_get};
+        use super::util::{collate_results, get_reply_target, http_get};
 
         pub struct RegexMatch {
             gapi_key: String,
@@ -262,8 +265,8 @@ mod bot {
                                         Ok(res) => Ok(res),
                                         Err(e) => Err(format!("{:?}", e))
                                     })
-                                    .fold(Ok(String::new()), collect_errors)
-                            }).fold(Ok(String::new()), collect_errors) {
+                                    .fold(Ok(String::new()), collate_results)
+                            }).fold(Ok(String::new()), collate_results) {
                                 Ok(res) => Ok(Some(Command::PRIVMSG(reply_target.to_owned(), res))),
                                 Err(e) => Err(Error::new(ErrorKind::Other, e))
                             }
