@@ -16,11 +16,14 @@ mod bot {
             match st {
                 Ok(mut st) => {
                     if let Ok(s) = s {
-                        if st.len() > 0 {
-                            st.push_str("; ");
+                        if !s.is_empty() {
+                            if !st.is_empty() {
+                                st.push_str("; ");
+                            }
+
+                            st.push_str(&s);
                         }
 
-                        st.push_str(&s);
                         Ok(st)
                     } else {
                         s
@@ -255,8 +258,7 @@ mod bot {
                                 re
                                     .captures_iter(suffix)
                                     .filter_map(|capture| capture.at(1))
-                                    .map(|capture| handler(self, capture))
-                                    .map(|res| match res {
+                                    .map(|capture| match handler(self, capture) {
                                         Ok(res) => Ok(res),
                                         Err(e) => Err(format!("{:?}", e))
                                     })
