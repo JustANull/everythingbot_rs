@@ -277,7 +277,7 @@ fn main() {
             regex_match.add((Regex::new(r"(?:(?:youtube\.com/watch\?\S*?v=)|(?:youtu\.be/))([\w-]+)").unwrap(),
                              Box::new(move |res| yt_handler(&gapi_key, &mut cache, res))));
         },
-        Ok(Err(utf_err)) => error!("gapi_key.dat formatting error: {}", utf_err), // log error
+        Ok(Err(utf_err)) => error!("gapi_key.dat formatting error: {}", utf_err),
         Err(io_err) => warn!("gapi_key.dat should contain a Google API key to use youtube functionality: {}", io_err),
     }
     match file_get(Path::new("wapi_key.dat")).map(String::from_utf8) {
@@ -285,7 +285,7 @@ fn main() {
             regex_match.add((Regex::new(r"^!weather\s*(.+?)\s*$").unwrap(),
                              Box::new(move |res| weather_handler(&wapi_key, res))));
         },
-        Ok(Err(utf_err)) => error!("wapi_key.dat formatting error: {}", utf_err), // log error
+        Ok(Err(utf_err)) => error!("wapi_key.dat formatting error: {}", utf_err),
         Err(io_err) => warn!("wapi_key.dat should contain an OpenWeatherMap API key to use weather functionality: {}", io_err),
     }
 
