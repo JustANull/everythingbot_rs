@@ -1,6 +1,6 @@
 [package]
-name = "everything_bot2"
-version = "0.0.1"
+name = "everything_bot"
+version = "0.0.2"
 authors = ["JustANull <reid.levenick@gmail.com>"]
 
 [dependencies]
