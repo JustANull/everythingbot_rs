@@ -4,7 +4,7 @@ A rewrite of my Python everythingbot to be in Rust so as to take more advantage 
 
 ## Building
 
-This README was last updated with rustc version "rustc 1.3.0 (9a92aaf19 2015-09-15)"  
+This README was last updated with rustc version "rustc 1.7.0-nightly (110df043b 2015-12-13)"
 
 Run `cargo build` from the root of this project.  
 Create a `config.json` file in the root of this project. For example:
