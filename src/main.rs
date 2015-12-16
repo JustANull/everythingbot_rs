@@ -48,23 +48,20 @@ fn gfycat_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<Strin
             }
 
             // Panic here if we don't see what we expect, since the API shouldn't change underneath us
-            let item = resp_json
-                .find("gfyItem").expect("gfycat API error - could not find 'gfyItem'")
-                .as_object().expect("gfycat API error - 'gfyItem' was not an object");
-            let framerate = item
-                .get("frameRate").expect("gfycat API error - could not find 'frameRate'")
+            let framerate = resp_json
+                .lookup("gfyItem.frameRate").expect("gfycat API error - could not find 'frameRate'")
                 .as_f64().expect("gfycat API error - 'framerate' was not a f64");
-            let frames = item
-                .get("numFrames").expect("gfycat API error - could not find 'numFrames'")
+            let frames = resp_json
+                .lookup("gfyItem.numFrames").expect("gfycat API error - could not find 'numFrames'")
                 .as_u64().expect("gfycat API error - 'numFrames' was not a u64");
-            let nsfw = item
-                .get("nsfw").expect("gfycat API error - could not find 'nsfw'")
+            let nsfw = resp_json
+                .lookup("gfyItem.nsfw").expect("gfycat API error - could not find 'nsfw'")
                 .as_string().map_or("", |s| if s == "1" { "NSFW " } else { "" });
-            let size = item
-                .get("webmSize").expect("gfycat API error - could not find 'webmSize'")
+            let size = resp_json
+                .lookup("gfyItem.webmSize").expect("gfycat API error - could not find 'webmSize'")
                 .as_u64().expect("gfycat API error - 'webmSize' was not a u64");
-            let title = item
-                .get("title").expect("gfycat API error - could not find 'title'")
+            let title = resp_json
+                .lookup("gfyItem.title").expect("gfycat API error - could not find 'title'")
                 .as_string().map_or("<unknown>".to_owned(), |s| format!("\"{}\"", s));
 
             let res = format!("{}{} ({:.2} MB, {:.1} seconds)", nsfw, title, size as f64 / (2.0 * 1024.0 * 1024.0), frames as f64 / framerate);
@@ -109,13 +106,11 @@ fn weather_handler(wapi_key: &str, loc: &str) -> Result<String, Error> {
         .as_array().expect("OpenWeatherMap API error - 'weather' was not an array")[0]
         .find("description").expect("OpenWeatherMap API error - could not find 'description'")
         .as_string().expect("OpenWeatherMap API error - 'description' was not a string");
-    let main = resp_json
-        .find("main").expect("OpenWeatherMap API error - could not find 'main'");
-    let temp_k = main
-        .find("temp").expect("OpenWeatherMap API error - could not find 'temp'")
+    let temp_k = resp_json
+        .lookup("main.temp").expect("OpenWeatherMap API error - could not find 'temp'")
         .as_f64().expect("OpenWeatherMap API error - 'temp' was not a number");
-    let humidity = main
-        .find("humidity").expect("OpenWeatherMap API error - could not find 'humidity'")
+    let humidity = resp_json
+        .lookup("main.humidity").expect("OpenWeatherMap API error - could not find 'humidity'")
         .as_f64().expect("OpenWeatherMap API error - 'humidity' was not a number");
     let wind_speed = resp_json
         .find("wind").expect("OpenWeatherMap API error - could not find 'wind'")
