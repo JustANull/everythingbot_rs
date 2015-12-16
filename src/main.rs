@@ -6,7 +6,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate regex;
-extern crate rustc_serialize as serialize;
+extern crate serde;
+extern crate serde_json;
 
 mod bot;
 
@@ -16,7 +17,8 @@ use hyper::client::Client;
 use hyper::status::StatusCode;
 use irc::client::data::Config;
 use regex::Regex;
-use serialize::json;
+use serde_json::Value;
+
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fs::File;
@@ -31,7 +33,7 @@ fn gfycat_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<Strin
             let url = format!("http://gfycat.com/cajax/get/{}", id);
 
             let resp = &try!(http_get(&url))[..];
-            let resp_json = match json::Json::from_str(resp) {
+            let resp_json: Value = match serde_json::from_str(resp) {
                 Ok(resp_json) => resp_json,
                 Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
@@ -43,7 +45,7 @@ fn gfycat_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<Strin
                     return Err(Error::new(ErrorKind::Other, e))
                 },
                 None => {}
-            };
+            }
 
             // Panic here if we don't see what we expect, since the API shouldn't change underneath us
             let item = resp_json
@@ -84,7 +86,7 @@ fn weather_handler(wapi_key: &str, loc: &str) -> Result<String, Error> {
     let url = format!("http://api.openweathermap.org/data/2.5/weather?q={}&APPID={}", loc, wapi_key);
 
     let resp = &try!(http_get(&url))[..];
-    let resp_json = match json::Json::from_str(resp) {
+    let resp_json: Value = match serde_json::from_str(resp) {
         Ok(resp_json) => resp_json,
         Err(e) => return Err(Error::new(ErrorKind::Other, e))
     };
@@ -175,7 +177,7 @@ fn yt_handler(gapi_key: &str, cache: &mut HashMap<String, String>, id: &str) -> 
             let url = format!("https://www.googleapis.com/youtube/v3/videos?id={}&key={}&part=snippet,contentDetails&fields=items(snippet/title,snippet/channelTitle,contentDetails/duration)", id, gapi_key);
 
             let resp = &try!(http_get(&url))[..];
-            let resp_json = match json::Json::from_str(resp) {
+            let resp_json: Value = match serde_json::from_str(resp) {
                 Ok(resp_json) => resp_json,
                 Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
@@ -211,7 +213,7 @@ fn xkcd_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<String,
             let url = format!("https://xkcd.com/{}/info.0.json", id);
 
             let resp = &try!(http_get(&url))[..];
-            let resp_json = match json::Json::from_str(resp) {
+            let resp_json: Value = match serde_json::from_str(resp) {
                 Ok(resp_json) => resp_json,
                 Err(e) => return Err(Error::new(ErrorKind::Other, e))
             };
