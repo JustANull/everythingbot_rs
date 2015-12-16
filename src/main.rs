@@ -51,7 +51,7 @@ fn gfycat_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<Strin
                 .as_object().expect("gfycat API error - 'gfyItem' was not an object");
             let framerate = item
                 .get("frameRate").expect("gfycat API error - could not find 'frameRate'")
-                .as_u64().expect("gfycat API error - 'framerate' was not a u64");
+                .as_f64().expect("gfycat API error - 'framerate' was not a f64");
             let frames = item
                 .get("numFrames").expect("gfycat API error - could not find 'numFrames'")
                 .as_u64().expect("gfycat API error - 'numFrames' was not a u64");
@@ -65,7 +65,7 @@ fn gfycat_handler(cache: &mut HashMap<String, String>, id: &str) -> Result<Strin
                 .get("title").expect("gfycat API error - could not find 'title'")
                 .as_string().map_or("<unknown>".to_owned(), |s| format!("\"{}\"", s));
 
-            let res = format!("{}{} ({:.2} MB, {:.1} seconds)", nsfw, title, size as f64 / (2.0 * 1024.0 * 1024.0), frames as f64 / framerate as f64);
+            let res = format!("{}{} ({:.2} MB, {:.1} seconds)", nsfw, title, size as f64 / (2.0 * 1024.0 * 1024.0), frames as f64 / framerate);
             entry.insert(res).clone()
         }
     })
